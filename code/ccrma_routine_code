@@ -1,0 +1,158 @@
+
+(
+	(Pdef(\x,
+	Pbind(
+	\instrument, \wobble,
+	\freq,(38.midicps),//Pseq([47],inf),
+	\cf,(38-12).midicps,
+	\wobble,0,
+	\amp,0.65,
+	\lo,1,
+	\hi,4,
+	\rq,0.5,
+	\pw,1,
+	\out,0,
+	\startPos,0,
+	\endPos,2,
+	\panRate,0.25
+)));
+
+r = Synth(\reverb,[\bus,~a1,\out,~a2]);
+
+
+//e = Synth(\fadeIn,[\bus,~a3,\out,~a1,\dur,60],target:r,addAction:'addAfter');
+o = Synth(\masterOut,[\bus,~a2,\amp,0.25],addAction:'addToTail');
+
+q = Pseq([6], inf).asStream;//ordered sequence of durations
+o = [6,5,4.5,3,3].asStream;
+c =[54,57,49,47,52,42].asStream;
+d = [38,50].asStream;
+
+
+f = [42,46,49,44,48];
+g = [0.5,0.7,0.25,0.6,0.7].asStream;
+
+~panRand = [0.0,0.25,0.5,0.75,1.0,1.25,1.5,1.75,2.0].asStream;
+
+t = Task({
+	5.do({ |i|
+
+		if (i==2,{Pdef(\x).play;},{"nope".postln;});
+		x.release(3);
+		/// O bass
+		~pos = ~panRand.choose.postln;
+		x = Synth(\formant,[index:13,freq:d.choose,amp:0.75,startPos:~pos,endPos:~pos,\out, 0]);
+		x.release;
+
+		(o[i]).wait;
+		~pos = ~panRand.choose.postln;
+		// E tenor
+		y = Synth(\formant,[index:4,freq:c.choose,\amp,0.75,startPos:~pos,endPos:~pos,\out,0]);
+		o[i].wait;      // E tenor
+		~pos = ~panRand.choose.postln;
+
+		//if(i!=5,{"dont change the release".postln;},{y.set(\outerSus,100);"chya".postln;});
+		y = Synth(\formant,[index:4,freq:c.choose,\amp,0.75,startPos:~pos,endPos:~pos,\out, 0]);
+		o[i].wait;
+		x.release; if(i==5,{"don't release y".postln;},{y.release;"release the dogs".postln;});
+	});
+
+
+	//Pdef(\x).play;
+	14.wait;
+
+	z = Synth(\grain,[\buf,~b[0],\pos,~b[0].duration,\pRate,0.8,\dur,1,startPos:2.0,endPos:0,\panRate,0.25,\out, 0,\amp,3]);
+
+	14.wait;
+
+	5.do({
+		|i| i.postln; i = i+1;
+		x.release(2);
+		~pos = ~panRand.choose;
+		~pos.postln;
+		"LOOOK HERE".postln;
+		x = Synth(\formant, [\index,0,\freq,46,\amp,0.5,startPos:~pan,\endPos,~pan,\out,0,\outerAtk,1,\outRel,0.1]);
+		((i.reciprocal**2)+1).wait;
+		~pos = ~panRand.choose;
+		x = Synth(\formant, [\index,0,\freq,49,\amp,0.5,\startPos,0.0,\endPos,0.5,\out,0,\outerAtk,0.1,\outRel,0.2]);
+		((i.reciprocal**2)+1).wait;
+		~pos = ~panRand.choose;
+		x = Synth(\formant, [\index,0,\freq,44,\amp,0.5,\startPos,0.0,\endPos,0.5,\out, ~a1,\outerAtk,0.1,\outRel,0.2]);
+		((i.reciprocal**2)+1).wait;
+		~pos = ~panRand.choose;
+		x = Synth(\formant, [\index,0,\freq,48,\amp,0.5,\startPos,0.0,\endPos,0.5,\out,0,\outerAtk,1,\outRel,0.1]);
+		((i.reciprocal**2)+1).wait;
+
+		if(i==3,{{Out.kr(~bus2,LFClipNoise.kr(1).range(1,1.25))}.play;
+			z = Synth(\grain,[\buf,~b[0],\pos,~b[0].duration/2,\pRate,0.25,\dur,1/4,startPos:0.0,\out, ~a1,\amp,2,\panRate,0.25]);
+		z.map(\endpos,~bus2);},{"not 3".postln;});
+
+	});
+
+	12.wait;
+	z = Synth(\grain,[\buf,~b[0],\pos,~b[0].duration,\pRate,3,\dur,1/4,startPos:2.0,endPos:0,\panRate,1,\out, 0,\amp,4]);
+	1.wait;
+	z = Synth(\grain,[\buf,~b[0],\pos,~b[0].duration,\pRate,2.8,\dur,1/8,startPos:0,endPos:2.0,\panRate,1,\out, 0,\amp,4]);
+	1.wait;
+	h = Synth(\grain,[\buf,~b[0],\pos,~b[0].duration,\pRate,0.75,\dur,1/2,startPos:1.0,endPos:0,\panRate,1,\out, 0,\amp,4]);
+	2.wait;
+	d = Synth(\samplePlay,[\buff,~buff,\frames,~buff.numFrames,\amp,0.1,\rate,0.3]);
+
+	5.wait;
+
+
+		inf.do({
+		|i| i=i+1; i.postln;
+		{Out.kr(~bus,XLine.kr(0.2,i+2,2.85))}.play;
+		{Out.kr(~pitchBus,XLine.kr(i+5,0.01,2.85))}.play;
+		y.release;
+		~note = f.choose;
+		c = Synth(\formant,[index:13,freq:~note,amp:0.5,startPos:0.0,endPos:1,out: 0,\panRate,0.25,\pitchR,((i-1)+0.25)/i]);
+		c.map(\delayT,~bus);
+		c.map(\pitchD,~pitchBus);
+		c.map(\lag,~bus);
+
+		d = Synth(\samplePlay,[\buff,~buff,\frames,~buff.numFrames,\amp,0.1,\rate,0.2]);
+
+		//if(i==5,{d.set(\rate,0.3)},{d.map(\rate,~bus);});
+
+		c.release;
+
+		(q.value*(i/2).reciprocal).wait;
+
+		~note2 = f.choose;
+		y = Synth(\formant,[index:4,freq:~note2,amp:0.5,startPos:2,endPos:1,out:0,\panRate,0.25,\pitchR,((i-1)+0.25)/i]);
+		y.map(\pitchD,~pitchBus);
+		y.map(\delayT,~bus);
+		y.map(\lag,~pitchBus);
+		(q.value*(i/2).reciprocal).wait;
+		{Out.kr(~bus2,LFClipNoise.kr(0.25).range(0.1,1.25))}.play;
+		z = Synth(\grain,[\buf,~b[0],\pos,~b[0].duration/2,\dur,1/i%2,startPos:0.0,endPos:2.0,\out, 0]);
+		z.map(\pRate,~bus2);
+		})
+});
+t.start;
+)
+
+Pdef(\x,
+	Pbind(
+	\instrument, \wobble,
+	\freq,(44.midicps),//Pseq([47],inf),
+	\cf,(44-12).midicps,
+	\wobble,0,
+	\amp,0.3,
+	\lo,1,
+	\hi,4,
+	\rq,0.5,
+	\pw,1,
+	\out,~a1,
+	\endPos,2.0,
+	\panRate,0.1
+));
+
+Pdef(\x).play;
+Pdef(\x).stop;
+
+)
+
+

@@ -1,0 +1,18 @@
+(SynthDef(\space,{|f1=5,f2=17,r=9,b=1e4,atk,sus,rel, outBus,xpos,ypos,pan,amp=1|
+	var l, lpf, a, x,xx,xxx,i=1,mix,env;
+	env = EnvGen.kr(Env.linen(atk,sus,rel),doneAction:2);
+	l=LocalBuf(numFrames:b,numChannels:2);//LOCAL BUF
+	f1 = f1.midicps;
+	f2 = f2.midicps;
+	x=BufWr.ar(a=LFTri.ar(freq:i*[f1,f2]),bufnum:l,phase:a/i*b);
+	i=2;
+	xx=BufWr.ar(a=LFTri.ar(freq:i*[f1,f2]),bufnum:l,phase:a/i*b);
+	i=3;
+	xxx=BufWr.ar(a=LFTri.ar(freq:i*[f1,f2]),bufnum:l,phase:a/i*b);
+	mix=LPF.ar(PlayBuf.ar(numChannels:2,bufnum:l,rate:1/r,trigger:1,startPos:0,loop:1).clip2,freq:b)/2;
+	mix=GVerb.ar(mix,50).softclip;
+	mix = Mix([mix]);
+//	mix = Pan2.ar(mix,xpos);
+	Out.ar(outBus,(mix/6)*amp);
+}).send(s);)
+

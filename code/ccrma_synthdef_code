@@ -1,0 +1,342 @@
+
+s.options.numOutputBusChannels = 2
+s.meter;
+Server.local.options.memSize_(1048576)
+
+(fork{~b = "enter your own path to a folder of sounds/*.wav".resolveRelative.pathMatch.collect({|i| Buffer.readChannel(s,i,channels:[0])});//mono
+~buff = Buffer.read(s,"enter your own path to a single sound");
+~a1 = Bus.audio(s);
+~a2 = Bus.audio(s);
+~a3 = Bus.audio(s);
+
+~bus = Bus.control(s);
+~bus2 = Bus.control(s);
+~pitchBus = Bus.control(s);
+}
+)
+{Out.kr(~bus,XLine.kr(0.2,2,2.85))}.play;
+
+/*(SynthDef(\fadeIn,{ |bus, out, start, end, dur|
+	var sig, in;
+	in = In.ar(bus,2);
+	sig = EnvGen.kr(Env([0,1],[dur],'exp'));
+	in = in * sig;
+	Out.ar(out,in);
+}).add;)*/
+
+
+(SynthDef(\masterOut,{ |bus, amp=1|
+	var sig, in;
+	in = In.ar(bus,2);
+	in = Mix(in);
+	sig = in * amp;
+	Out.ar([0,1],sig);
+
+}).send(s);
+
+SynthDef(\reverb,{
+	|out, bus|
+	var in = In.ar(bus);
+	var sig = GVerb.ar(in,70,11,0.15);
+	Out.ar(out,sig);
+}).send(s);
+
+
+SynthDef(\grain,{
+	|rate=1.1, dur=(1), panRate=1.1, pRate=1,buf,pos, out,amp=1, startPos, endPos|
+	var sig, move, pan;
+	move = SinOsc.kr(panRate).range(startPos,endPos);
+
+	 sig = TGrains.ar(
+		numChannels:1,
+		trigger:LFPulse.kr(rate),
+		bufnum:buf,
+		rate:pRate,
+		centerPos:pos,
+		dur:dur,
+		pan:0,
+		amp:amp,
+		interp:4
+	);
+
+	sig = GVerb.ar(sig,70,11,0.15);
+
+	sig = Mix(sig);
+
+
+	 pan = PanAz.ar(
+		numChans:8,
+		in:sig,
+		pos:move,
+		level:1,
+		width:2,
+		orientation:0.0
+	);
+	Out.ar(out,pan*amp);
+}).send(s);
+
+
+
+
+
+
+SynthDef(\wobble, { |out, freq = 220, amp = 0.1, gate = 1, cf = 100, lag =  0.05, wobble = 3, pw = 0.4, atk=1, sus=1, rel=1, lo=0.5,hi=4,rq=0.3,startPos=0,endPos=0, panRate=1.1|
+	var move,pan;
+	var base = Splay.ar(RLPF.ar(SinOsc.ar(freq* [0.99,0.5,1.01,3/2,4/3,5/4],pw),cf.lag(lag),rq,SinOsc.ar(wobble).range(lo,hi)).sin).range(0,1) * 0.5;
+	var env = EnvGen.kr(Env.linen(atk,sus,rel), doneAction: 2);
+    var sig = base;
+	sig = tanh(/*/GVerb.ar(*/HPF.ar(base * env,freq:30));//,roomsize:70,revtime:11, damping:0.15)*0.5 );
+	sig = sig*env;
+
+	move = SinOsc.kr(panRate).range(startPos,endPos);
+
+	sig = Mix(sig);
+
+	pan = PanAz.ar(
+		numChans:8,
+		in:sig,
+		pos:move,
+		level:1,
+		width:2,
+		orientation:0
+	);
+
+	Out.ar(0, pan*amp);
+}).send(s);
+
+
+
+
+SynthDef(\samplePlay,{
+	|buff,rate,l=0,r=1, frames,amp=1,panRate=1|
+	var in;
+	in = PlayBuf.ar(
+		numChannels:2,
+		bufnum:buff,
+		rate:rate,
+		trigger:1,
+		startPos:frames * Line.kr(0,1,frames),
+		loop:1,
+		doneAction:2
+	);
+	in = LPF.ar(in,1800); // get rid of screech
+	in = Greyhole.ar(in);
+	in = Mix(in);
+	in = PanAz.ar(8,in,SinOsc.kr(panRate).range(0,8));
+	Out.ar(0,in*amp);
+}).send(s);
+
+
+
+
+SynthDef(\formant,{ |polyV = 1, freq = 50, amp = 0.1, rezScal = 1, atk=0.1,index=0, lag = 0.25, buff, b,formantFreq,formantBW, formantAmp,out=0,
+				outerAtk=1, outerSus=1, outerRel=4, delayT= 0.01, startPos=0, endPos=0, panRate=1.1,roomsize=70,revtime=11,damping=0.15, pitchR=1,timeD=0,pitchD=0|
+	var periodic, aPeriodic, source, vowelOut, env, vibrato, vibratoNoise, sig, periodicSin, periodicImp,pan;
+
+var template, tA, bA,aA,sA,
+	tE,bE,aE,sE,
+	tI,bI,aI,sI,
+	tO,bO,aO,sO,
+	tU,bU,aU,sU;
+
+	vibratoNoise = LFNoise1.kr(5);
+
+	vibrato = ( //remember that frequency is actually getting an input of midi (no .cps)
+				(freq)
+				+ (Line.kr(0.0,1.0,2.5) * SinOsc.kr(/*6 +*/ ( vibratoNoise),0,0.5) )
+	).midicps;
+
+	periodic = LPF.ar(Impulse.ar(vibrato),5000);
+	aPeriodic = PinkNoise.ar(0.7);
+	source = (polyV * periodic) + ( (1.0-polyV) * aPeriodic);//combine the periodic(vibrato) and aperiodic(noise) signal
+
+	tA = Formlet.ar(in:source,
+					freq:[650,1080,2650,2900,3250],
+					attacktime:atk,
+					decaytime:rezScal * [80,90,120,130,140].reciprocal,
+		mul: ([0,-6,-7,-8,-22]-6).dbamp
+					);
+
+	bA = Formlet.ar(in:source,
+					freq:[600,1040,2250,2450,2750],
+					attacktime:atk,
+					decaytime:rezScal * [60,70,100,120,120].reciprocal,
+					mul:([0,-7,-9,-9,-20]-6).dbamp
+					);
+	aA = Formlet.ar(in:source,
+					freq:[800,1150,2800,3500,4950],
+					attacktime:atk,
+					decaytime:rezScal * [80,90,120,130,140].reciprocal,
+					mul:([0,-4,-20,-36,-60]-6).dbamp
+					);
+	sA = Formlet.ar(in:source,
+					freq:[800,1150,2900,3900,4950],
+					attacktime:atk,
+					decaytime:rezScal * [80,90,120,130,140].reciprocal,
+					mul:([0,-6,-32,-20,-50]-6).dbamp
+					);
+
+	tE = Formlet.ar(in:source,
+					freq:[400,1700,2600,3200,3580],
+					attacktime:atk,
+					decaytime:rezScal * [70,80,100,120,120].reciprocal,
+					mul:([0,-14,-12,-14,-20]-6).dbamp
+					);
+	bE = Formlet.ar(in:source,
+					freq:[400,1620,2400,2800,3100],
+					attacktime:atk,
+					decaytime:rezScal * [40,80,100,120,120].reciprocal,
+					mul:([0,-12,-9,-12,-18]-6).dbamp
+					);
+
+	aE = Formlet.ar(in:source,
+					freq:[400,1600,2700,3300,4950],
+					attacktime:atk,
+					decaytime:rezScal * [60,80,120,150,200].reciprocal,
+					mul:([0,-24,-30,-35,-60]-6).dbamp
+					);
+	sE = Formlet.ar(in:source,
+					freq:[350,2000,2800,3600,4950],
+					attacktime:atk,
+					decaytime:rezScal * [60,100,120,150,200].reciprocal,
+					mul:([0,-20,-15,-40,-56]-6).dbamp
+					);
+	tI = Formlet.ar(in:source,
+					freq:[290,1870,2800,3250,3540],
+					attacktime:atk,
+					decaytime:rezScal * [40,90,100,120,120].reciprocal,
+					mul:([0,-15,-18,-20,-30]-6).dbamp
+					);
+	bI = Formlet.ar(in:source,
+					freq:[250,1750,2600,3050,3340],
+					attacktime:atk,
+					decaytime:rezScal * [60,90,100,120,120].reciprocal,
+					mul:([0,-30,-16,-22,-28]-6).dbamp
+					);
+	aI = Formlet.ar(in:source,
+					freq:[350,1700,2700,3700,4950],
+					attacktime:atk,
+					decaytime:rezScal * [50,100,120,150,200].reciprocal,
+					mul:([0,-20,-30,-36,-60]-6).dbamp
+					);
+	sI = Formlet.ar(in:source,
+					freq:[270,2140,2950,3900,4950],
+					attacktime:atk,
+					decaytime:rezScal * [60,90,100,120,120].reciprocal,
+					mul:([0,-12,-26,-26,-44]-6).dbamp
+					);
+	tO = Formlet.ar(in:source,
+					freq:[400,800,2600,2800,3000],
+					attacktime:atk,
+					decaytime:rezScal * [40,80,100,120,120].reciprocal,
+					mul:([0,-10,-12,-12,-26]-6).dbamp
+					);
+	bO = Formlet.ar(in:source,
+					freq:[400,750,2400,2600,2900],
+					attacktime:atk,
+					decaytime:rezScal * [40,80,100,120,120].reciprocal,
+					mul:([0,-11,-21,-20,-40]-6).dbamp
+					);
+	aO = Formlet.ar(in:source,
+					freq:[450,800,2830,3500,4950],
+					attacktime:atk,
+					decaytime:rezScal * [70,80,100,130,135].reciprocal,
+					mul:([0,-9,-16,-28,-55]-6).dbamp
+					);
+
+	sO = Formlet.ar(in:source,
+					freq:[450,800,2830,3800,4950],
+					attacktime:atk,
+					decaytime:rezScal * [70,80,100,130,135].reciprocal,
+					mul:([0,-11,-22,-22,-50]-6).dbamp
+					);
+
+	tU = Formlet.ar(in:source,
+					freq:[350,600,2700,2900,3300],
+					attacktime:atk,
+					decaytime:rezScal * [40,60,100,120,120].reciprocal,
+					mul:([0,-20,-17,-14,-26]-6).dbamp
+					);
+	bU = Formlet.ar(in:source,
+					freq:[350,600,2400,2675,2950],
+					attacktime:atk,
+					decaytime:rezScal * [40,60,100,120,120].reciprocal,
+					mul:([0,-20,-32,-28,-36]-6).dbamp
+					);
+	aU = Formlet.ar(in:source,
+					freq:[325,700,2530,3500,4950],
+					attacktime:atk,
+					decaytime:rezScal * [50,60,170,180,200].reciprocal,
+					mul:([0,-12,-30,-40,-64]-6).dbamp
+					);
+	sU = Formlet.ar(in:source,
+					freq:[325,700,2700,3800,4950],
+					attacktime:atk,
+					decaytime:rezScal * [50,60,170,180,200].reciprocal,
+
+					mul:([0,-16,-35,-40,-60]-6).dbamp
+				);
+	buff  = PlayBuf.ar(1,b,BufRateScale.kr(b),loop:1.0);
+
+	template = Formlet.ar(
+		in:buff,
+		freq:formantFreq,
+		attacktime:atk,
+		decaytime:rezScal * formantBW.reciprocal,
+		mul:formantAmp
+	);
+
+
+	sig = SelectX.ar(which:index,array:[tA,bA,aA,sA,tE,bE,aE,sE,tI,bI,aI,sI,tO,bO,aO,sO,tU,bU,aU,sU,template]);
+	sig = Mix(sig)*amp;
+	env = EnvGen.kr(Env.linen(outerAtk,outerSus,outerRel),doneAction:2);
+	sig = LPF.ar(sig,1200);
+
+
+	sig = DelayC.ar(sig,delaytime:delayT);
+
+	sig = sig ;
+
+	sig = PitchShift.ar(sig,pitchRatio:pitchR,pitchDispersion:pitchD,timeDispersion:timeD);
+
+	sig = GVerb.ar(sig,roomsize,revtime,damping);
+	sig  = Mix(sig)*env;
+	pan = PanAz.ar(
+		numChans:8,
+		in:sig,
+		pos:SinOsc.kr(panRate).range(startPos,endPos),
+		level:1,
+		width:2,
+		orientation:0.5
+	);
+
+	Out.ar(out,pan*amp);
+}).send(s);
+)
+
+
+
+/*
+0 A tenor
+1 A bass
+2 A alto
+3 A soprano
+4 E tenor
+5 E bass
+6 E alto
+7 E soprano
+8 I tenor
+9 I bass
+10 I alto
+11 I soprano
+12 O tenor
+13 O bass
+14 O alto
+15 O soprano
+16 U tenor
+17 U bass
+18 U alto
+19 U soprano
+20 template
+
+*/

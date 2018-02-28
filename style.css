@@ -1,0 +1,30 @@
+*{
+	box-sizing: border-box;
+}
+
+
+body{
+	margin: 0;
+    background-color:black;
+    color:white;
+    font-family: "Courier New";
+    font-size: 0.375em;
+}
+
+.column{
+	float: center;
+	width: 33%;
+	padding: 10px;
+}
+
+.row:after{
+	content: "";
+	display: table;
+	clear: both;
+}
+
+@media (max-width: 600px){
+	.column{
+		width: 100%;
+	}
+}
