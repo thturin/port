@@ -1,3 +1,4 @@
 graphics/1a_solar_system.mov filter=lfs diff=lfs merge=lfs -text
 not_graphics/FOH.mp4 filter=lfs diff=lfs merge=lfs -text
 experiments/toy.MOV filter=lfs diff=lfs merge=lfs -text
+graphics/solar2.mp4 filter=lfs diff=lfs merge=lfs -text
